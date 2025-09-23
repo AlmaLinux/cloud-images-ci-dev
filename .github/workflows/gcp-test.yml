@@ -1,0 +1,105 @@
+name: GCP cloud-image-tests
+
+on:
+  workflow_dispatch:
+      inputs:
+        version_major:
+          description: 'AlmaLinux major version'
+          required: true
+          default: '10'
+          type: choice
+          options:
+            - 10-kitten
+            - 10
+            - 9
+            - 8
+        arch:
+          description: 'Architecture to test'
+          required: true
+          default: 'ALL'
+          type: choice
+          options:
+            - ALL
+            - x86_64
+            - aarch64
+        image_override:
+          description: 'Image to test, overrides version_major and arch.  This must be a full path to a GCP image, for example, projects/almalinux-dev-images-469421/global/images/almalinux-9-v20230920'
+          required: false
+          default: ''
+        # notify_mattermost:
+        #   description: "Send notification to Mattermost"
+        #   required: true
+        #   type: boolean
+        #   default: false
+
+jobs:
+  test-gcp:
+    runs-on: ubuntu-latest
+    steps:
+    - id: 'google-auth-image-testing'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        workload_identity_provider: 'projects/527193872801/locations/global/workloadIdentityPools/github-actions/providers/github'
+        service_account: 'github-actions-image-testing@almalinux-image-testing-469421.iam.gserviceaccount.com'
+    
+    - name: 'Set up Google Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v3.0.0'
+
+    - name: 'Clone Google cloud-image-testing repo'
+      uses: actions/checkout@v5
+      with:
+        path: cloud-image-tests
+        #repository: GoogleCloudPlatform/cloud-image-tests
+        repository: jonathanspw/cloud-image-tests
+        ref: "local_build_fixes"
+    - name: install dependencies
+      shell: bash
+      run: |
+        if lsb_release -cs > /dev/null 2>&1; then
+            sudo apt update
+            sudo apt-get -y install golang-go
+        elif [ -e /etc/redhat-release ]; then
+            sudo dnf -y -q install golang
+        else
+            echo "[Debug] Unknown OS"
+            exit 1
+        fi
+        # print golang version for reference
+        go version
+
+    - name: Build Google cloud-image-testing manager
+      shell: bash
+      run: |
+        cd cloud-image-tests
+        ./local_build.sh -j $(nproc) -o bin
+
+    - name: Determine image to test
+      id: determine_image
+      run: |
+        if [ -n "${{ inputs.image_override }}" ]; then
+            echo "Using image override: ${{ inputs.image_override }}"
+            image_path="${{ inputs.image_override }}"
+        elif [ "${{ inputs.arch == 'ALL' }}" ]; then
+            echo "Using version major: ${{ inputs.version_major }}"
+            echo "Using all architectures"
+            image_path="projects/almalinux-dev-images-469421/global/images/family/almalinux-${{ inputs.version_major }}"
+        else
+            echo "Using version major: ${{ inputs.version_major }}"
+            ECHO "Using arch: ${{ inputs.arch }}"
+            image_path="projects/almalinux-dev-images-469421/global/images/family/almalinux-${{ inputs.version_major }}${{ inputs.arch == 'aarch64' && '-arm64' || '' }}"
+        fi
+        echo "image_path=${image_path}" >> $GITHUB_OUTPUT
+
+    - name: 'Run Google cloud-image-testing tests (basic suite)'
+      shell: bash
+      run: |
+        cd cloud-image-tests
+        ./bin/manager \
+          -local_path bin \
+          -project almalinux-image-testing-469421 \
+          -filter '^(cvm|livemigrate|suspendresume|loadbalancer|guestagent|hostnamevalidation|imageboot|licensevalidation|network|security|hotattach|lssd|disk|packagevalidation|ssh|metadata|vmspec)$' \
+          -images '${{ env.image_path }}' \
+          -parallel_stagger 10s -parallel_count 20
+
+      # - name: Send Mattermost Notification
+      #   if: $
