@@ -176,7 +176,7 @@ source "virtualbox-iso" "almalinux-9-aarch64" {
   boot_command         = var.vagrant_boot_command_9_aarch64
   boot_wait            = var.boot_wait
   disk_size            = var.vagrant_disk_size
-  guest_os_type        = "RedHat_64"
+  guest_os_type        = "Oracle_arm64"
   cpus                 = var.cpus
   memory               = var.memory_aarch64
   headless             = var.headless

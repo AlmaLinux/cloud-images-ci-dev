@@ -29,7 +29,7 @@ env:
 
 jobs:
   build-vagrant-arm64:
-    runs-on: ${{ format('runs-on={0}/family={1}/region={2}', github.run_id, 'mac2-m2.metal', vars.AWS_REGION) }}
+    runs-on: macos-latest
 
     steps:
     - name: Checkout repository
