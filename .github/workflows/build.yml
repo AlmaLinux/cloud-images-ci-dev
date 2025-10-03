@@ -107,11 +107,12 @@ jobs:
             VARIANTS_GH+=("azure-x86_64")
             VARIANTS_SH+=("azure-aarch64")
           fi
-          if [ "${{ inputs.image_type }}" = "digitalocean" -o "${{ inputs.image_type }}" = "ALL" ]; then
-            if [[ "${{ inputs.version_major }}" != *"kitten"*  ]] && [[ "${{ inputs.version_major }}" != *"10"  ]]; then
-              VARIANTS_GH+=("digitalocean-x86_64")
-            fi
-          fi
+          # TODO: require data to work with the cloud, such as: bucket, access key, secret key, etc.
+          # if [ "${{ inputs.image_type }}" = "digitalocean" -o "${{ inputs.image_type }}" = "ALL" ]; then
+          #   if [[ "${{ inputs.version_major }}" != *"kitten"*  ]] && [[ "${{ inputs.version_major }}" != *"10"  ]]; then
+          #     VARIANTS_GH+=("digitalocean-x86_64")
+          #   fi
+          # fi
           if [ "${{ inputs.image_type }}" = "gencloud" -o "${{ inputs.image_type }}" = "ALL" ]; then
             VARIANTS_GH+=("gencloud-x86_64")
             VARIANTS_SH+=("gencloud-aarch64")
@@ -179,9 +180,9 @@ jobs:
             variant: '10-kitten-v2'
           - matrix_gh: 'oci-x86_64'
             variant: '10-kitten-v2'
-          # Kitten x86_64_v2 Vagrant for VirtualBox stuck on "Waiting for SSH to become available"
-          - matrix_gh: 'vagrant_virtualbox-x86_64'
-            variant: '10-kitten-v2'
+          # TODO: Kitten x86_64_v2 Vagrant for VirtualBox stuck on "Waiting for SSH to become available"
+          # - matrix_gh: 'vagrant_virtualbox-x86_64'
+          #   variant: '10-kitten-v2'
           - matrix_gh: 'digitalocean-x86_64'
             variant: '10-kitten-v2'
           - matrix_gh: 'azure-x86_64'
