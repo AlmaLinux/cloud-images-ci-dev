@@ -1,14 +1,14 @@
 ---
-- name: Include sbom_data role for SBOM data collection
-  include_role:
-    name: sbom_data
-  when: collect_sbom_data | bool
-
 - name: Remove older versions kernel and other packages
   ansible.builtin.command: dnf -y remove --oldinstallonly
   register: removeoldoutput
   changed_when: removeoldoutput.rc == 0
   ignore_errors: yes
+
+- name: Include sbom_data role for SBOM data collection
+  include_role:
+    name: sbom_data
+  when: collect_sbom_data | bool
 
 - name: Include repo metadata dump role (for SBOMs)
   include_role:

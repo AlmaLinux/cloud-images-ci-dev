@@ -7,10 +7,12 @@
 - name: Collect SBOM data from the system
   ansible.builtin.shell: python3 /dev/shm/sbom_data_collector.py -o /dev/shm/sbom-data.json -v
   register: sbom_data_collector
+  failed_when: false
   
 - name: Write SBOM data to artifact file
   ansible.builtin.fetch:
     src: /dev/shm/sbom-data.json
-    dest: "/tmp/sbom-data-{{ packer_build_name }}.json"
+    dest: /tmp/sbom-data-{{ packer_build_name }}.json
     flat: true
   become: false
+  when: sbom_data_collector.changed
