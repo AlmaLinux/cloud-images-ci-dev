@@ -10,10 +10,6 @@
     name: sbom_data
   when: collect_sbom_data | bool
 
-- name: Include repo metadata dump role (for SBOMs)
-  include_role:
-    name: dump_repo_metadata
-
 - name: Find persistent net rules
   ansible.builtin.find:
     paths: /etc/udev/rules.d

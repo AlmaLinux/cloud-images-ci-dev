@@ -516,10 +516,8 @@ runs:
     - name: Generate SBOM
       shell: bash
       run: |
-        . ./.venv-sbom/bin/activate
         echo "Generating SBOM document of ${{ env.IMAGE_FILE }}"
-        python3 sbom-tools/sbom_generator.py "${{ env.IMAGE_NAME }}" "${{ env.IMAGE_FILE }}.sbom-data.json" "${{ env.IMAGE_FILE }}.sbom.spdx.json"
-        done
+        sudo .venv-sbom/bin/python3 sbom-tools/sbom_generator.py "${{ env.IMAGE_NAME }}" "${{ env.IMAGE_FILE }}.sbom-data.json" "${{ env.IMAGE_FILE }}.sbom.spdx.json"
 
     # - name: Setup tmate session
     #   uses: mxschmitt/action-tmate@v3
@@ -616,7 +614,7 @@ runs:
         path: ${{ env.IMAGE_FILE }}
 
     - uses: actions/upload-artifact@v4
-      name: Store repo metadata as artifact
+      name: Store collected sbom data as artifact
       id: sbom-data-artifact
       if: inputs.store_as_artifact == 'true'
       with:
