@@ -517,12 +517,8 @@ runs:
       shell: bash
       run: |
         . ./.venv-sbom/bin/activate
-        mkdir -p sbom
-        shopt -s nullglob
-        for f in *.sbom-data.json; do
-          echo "Generating SBOM document with $f"
-          base=$(basename "$f" .json)
-          python3 sbom-tools/sbom_generator.py "${base}" "$f" "${base}.sbom.spdx.json"
+        echo "Generating SBOM document of ${{ env.IMAGE_FILE }}"
+        python3 sbom-tools/sbom_generator.py "${{ env.IMAGE_NAME }}" "${{ env.IMAGE_FILE }}.sbom-data.json" "${{ env.IMAGE_FILE }}.sbom.spdx.json"
         done
 
     # - name: Setup tmate session
