@@ -441,64 +441,64 @@ runs:
         # don't fail if this doesn't exist, we may not always generate it
         sudo mv sbom-data-*.json $(basename ${image_file}).sbom-data.json || true
 
-    #- id: 'google-auth-dev-images'
-    #  if: env.IMAGE_TYPE == 'gcp'
-    #  uses: 'google-github-actions/auth@v2'
-    #  with:
-    #    workload_identity_provider: 'projects/443728870479/locations/global/workloadIdentityPools/github-actions/providers/github'
-    #    service_account: 'github-actions-cloud-images@almalinux-dev-images-469421.iam.gserviceaccount.com'
-    #
-    #- name: 'Set up Google Cloud SDK'
-    #  if: env.IMAGE_TYPE == 'gcp'
-    #  uses: 'google-github-actions/setup-gcloud@v3.0.0'
+    - id: 'google-auth-dev-images'
+      if: env.IMAGE_TYPE == 'gcp'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        workload_identity_provider: 'projects/443728870479/locations/global/workloadIdentityPools/github-actions/providers/github'
+        service_account: 'github-actions-cloud-images@almalinux-dev-images-469421.iam.gserviceaccount.com'
 
-    #- name: 'Upload output to GCP storage bucket'
-    #  if: env.IMAGE_TYPE == 'gcp'
-    #  shell: bash
-    #  run: gcloud storage cp ${{ env.IMAGE_FILE }} gs://almalinux-images-dev/almalinux-${version_major}${{ inputs.arch == 'aarch64' && '-arm64' || '' }}-v$(date +'%Y%m%d')/root.tar.gz
+    - name: 'Set up Google Cloud SDK'
+      if: env.IMAGE_TYPE == 'gcp'
+      uses: 'google-github-actions/setup-gcloud@v3.0.0'
 
-    #- name: Clone gce_image_publish repo
-    #  if: env.IMAGE_TYPE == 'gcp'
-    #  uses: actions/checkout@v5
-    #  with:
-    #    path: compute-image-tools
-    #    repository: GoogleCloudPlatform/compute-image-tools
-    #    ref: "20250916.00"
+    - name: 'Upload output to GCP storage bucket'
+      if: env.IMAGE_TYPE == 'gcp'
+      shell: bash
+      run: gcloud storage cp ${{ env.IMAGE_FILE }} gs://almalinux-images-dev/almalinux-${version_major}${{ inputs.arch == 'aarch64' && '-arm64' || '' }}-v$(date +'%Y%m%d')/root.tar.gz
 
-    #- name: Build gce_image_publish tool
-    #  if: env.IMAGE_TYPE == 'gcp'
-    #  shell: bash
-    #  run: |
-    #    # we need golang
-    #    case ${{ env.runner_os }} in
-    #      ubuntu)
-    #        sudo apt update
-    #        sudo apt-get -y install golang-go
-    #        ;;
-    #      rhel)
-    #        sudo dnf -y -q install golang
-    #        ;;
-    #    esac
-    #    # print golang version for reference
-    #    go version
-    #    # Build gce_image_publish tool
-    #    cd compute-image-tools/cli_tools/gce_image_publish
-    #    go mod tidy
-    #    go install
+    - name: Clone gce_image_publish repo
+      if: env.IMAGE_TYPE == 'gcp'
+      uses: actions/checkout@v5
+      with:
+        path: compute-image-tools
+        repository: GoogleCloudPlatform/compute-image-tools
+        ref: "20250916.00"
 
-    #- name: Create test image on GCP
-    #  if: env.IMAGE_TYPE == 'gcp'
-    #  shell: bash
-    #  run: |
-    #    /home/$USER/go/bin/gce_image_publish \
-    #      -var:environment=test \
-    #      -skip_confirmation \
-    #      -rollout_rate=0 \
-    #      -publish_project="almalinux-dev-images-469421" \
-    #      -work_project="almalinux-dev-images-469421" \
-    #      -replace \
-    #      -source_gcs_path="gs://almalinux-images-dev/" \
-    #      vm-scripts/gcp/almalinux_${version_major}${{ inputs.arch == 'aarch64' && '_arm64' || '' }}.publish.json
+    - name: Build gce_image_publish tool
+      if: env.IMAGE_TYPE == 'gcp'
+      shell: bash
+      run: |
+        # we need golang
+        case ${{ env.runner_os }} in
+          ubuntu)
+            sudo apt update
+            sudo apt-get -y install golang-go
+            ;;
+          rhel)
+            sudo dnf -y -q install golang
+            ;;
+        esac
+        # print golang version for reference
+        go version
+        # Build gce_image_publish tool
+        cd compute-image-tools/cli_tools/gce_image_publish
+        go mod tidy
+        go install
+
+    - name: Create test image on GCP
+      if: env.IMAGE_TYPE == 'gcp'
+      shell: bash
+      run: |
+        /home/$USER/go/bin/gce_image_publish \
+          -var:environment=test \
+          -skip_confirmation \
+          -rollout_rate=0 \
+          -publish_project="almalinux-dev-images-469421" \
+          -work_project="almalinux-dev-images-469421" \
+          -replace \
+          -source_gcs_path="gs://almalinux-images-dev/" \
+          vm-scripts/gcp/almalinux_${version_major}${{ inputs.arch == 'aarch64' && '_arm64' || '' }}.publish.json
 
     # - name: 'Run Google cloud-image-testing tests (basic suite)'
     #   if: env.IMAGE_TYPE == 'gcp' && inputs.run_test == 'true'
@@ -512,15 +512,11 @@ runs:
     #       -images 'projects/almalinux-dev-images-469421/global/images/family/almalinux-${{ env.version_major }}${{ inputs.arch == 'aarch64' && '-arm64' || '' }}' \
     #       -parallel_stagger 10s -parallel_count 20
 
-    # TODO
     - name: Generate SBOM
       shell: bash
       run: |
         echo "Generating SBOM document of ${{ env.IMAGE_FILE }}"
         sudo .venv-sbom/bin/python3 sbom-tools/sbom_generator.py "${{ env.IMAGE_NAME }}" "${{ env.IMAGE_FILE }}.sbom-data.json" "${{ env.IMAGE_FILE }}.sbom.spdx.json"
-
-    # - name: Setup tmate session
-    #   uses: mxschmitt/action-tmate@v3
 
     - name: Test ${{ inputs.type }} ${{ inputs.variant }} image
       # Skip testing for vagrant_virtualbox on GH runner because 'vugrant up' fails to connect to the newly created VM via ssh:
