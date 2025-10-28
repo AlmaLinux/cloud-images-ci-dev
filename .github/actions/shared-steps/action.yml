@@ -397,7 +397,7 @@ runs:
       shell: bash
       run: |
         rm -rf sbom-tools
-        git clone --depth=1 https://github.com/javihernandez/cloud-images-sbom-tools.git sbom-tools
+        git clone --depth=1 https://github.com/AlmaLinux/cloud-images-sbom-tools.git sbom-tools
 
     - name: Set up Python and install generator deps
       uses: actions/setup-python@v5
@@ -410,8 +410,7 @@ runs:
       shell: bash
       run: |
         python -m venv .venv-sbom
-        . .venv-sbom/bin/activate
-        pip install -r sbom-tools/requirements.txt
+        .venv-sbom/bin/pip install -r sbom-tools/requirements.txt
 
     - name: Initialize packer
       shell: bash
