@@ -546,6 +546,10 @@ runs:
           # Get installed packages list
           sudo vagrant ssh default -c "rpm -qa --queryformat '%{NAME}\n' | sort > ${{ env.IMAGE_FILE }}.txt"
           sudo vagrant scp default:${{ env.IMAGE_FILE }}.txt ./${{ env.IMAGE_FILE }}.txt
+
+          sudo vagrant ssh default -c "sudo cat /proc/tty/driver/serial"
+          sudo vagrant ssh default -c "sudo cat /var/log/messages"
+
           # Cleanup Vagrant VM and box
           sudo vagrant destroy $(vagrant global-status | grep default | awk '{print $1}') --force || true
           sudo vagrant box remove ${{ inputs.type }}-${{ inputs.variant }} --force || true
