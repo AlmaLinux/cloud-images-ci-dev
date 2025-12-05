@@ -78,8 +78,4 @@ sed -i'' 's/apply_updates =.*/apply_updates = yes/' /etc/dnf/automatic.conf
 # Enable the DNF automatic timer service.
 systemctl enable dnf-automatic.timer
 
-# Blacklist the floppy module.
-echo "blacklist floppy" > /etc/modprobe.d/blacklist-floppy.conf
-restorecon /etc/modprobe.d/blacklist-floppy.conf
-
 %end

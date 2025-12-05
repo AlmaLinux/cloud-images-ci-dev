@@ -166,14 +166,6 @@ systemctl enable dnf-automatic.timer
 rm -f /etc/yum.repos.d/google-cloud-unstable.repo \
   /etc/yum.repos.d/google-cloud-staging.repo
 
-# Blacklist unnecessary modules
-cat <<EOF > /etc/modprobe.d/blacklist.conf
-blacklist floppy
-blacklist nouveau
-blacklist lbm-nouveau
-EOF
-restorecon /etc/modprobe.d/blacklist.conf
-
 # Generate initramfs from latest kernel instead of the running kernel.
 kver="$(ls -t /lib/modules | head -n1)"
 dracut -f --kver="${kver}"

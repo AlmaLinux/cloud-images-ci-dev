@@ -62,12 +62,11 @@ on:
             - self-hosted
             - aws-ec2
 
-        # TODO: the maximum number of inputs is 10, so can't add more
-        # run_test:
-        #   description: "Do image simple testing and generate installed packages list (vagrant_* only)"
-        #   required: true
-        #   type: boolean
-        #   default: false
+        run_test:
+          description: "Do image simple testing and generate installed packages list (vagrant_* only)"
+          required: true
+          type: boolean
+          default: true
 
         store_as_artifact:
           description: "Store images to the workflow Artifacts"
@@ -81,17 +80,13 @@ on:
           type: boolean
           default: true
 
-        vagrant_publish:
-          description: "Publish to Vagrant Cloud (vagrant_* only)"
-          required: true
-          type: boolean
-          default: false
-
         notify_mattermost:
           description: "Send notification to Mattermost"
           required: true
           type: boolean
           default: false
+env:
+  PACKER_GITHUB_API_TOKEN: ${{ secrets.GIT_HUB_TOKEN }}
 
 jobs:
   init-data:
@@ -119,11 +114,12 @@ jobs:
             VARIANTS_GH+=("gcp-x86_64")
             VARIANTS_SH+=("gcp-aarch64")
           fi
-          if [ "${{ inputs.image_type }}" = "digitalocean" -o "${{ inputs.image_type }}" = "ALL" ]; then
-            if [[ "${{ inputs.version_major }}" != *"kitten"*  ]] && [[ "${{ inputs.version_major }}" != *"10"  ]]; then
-              VARIANTS_GH+=("digitalocean-x86_64")
-            fi
-          fi
+          # TODO: require data to work with the cloud, such as: bucket, access key, secret key, etc.
+          # if [ "${{ inputs.image_type }}" = "digitalocean" -o "${{ inputs.image_type }}" = "ALL" ]; then
+          #   if [[ "${{ inputs.version_major }}" != *"kitten"*  ]] && [[ "${{ inputs.version_major }}" != *"10"  ]]; then
+          #     VARIANTS_GH+=("digitalocean-x86_64")
+          #   fi
+          # fi
           if [ "${{ inputs.image_type }}" = "gencloud" -o "${{ inputs.image_type }}" = "ALL" ]; then
             VARIANTS_GH+=("gencloud-x86_64")
             VARIANTS_SH+=("gencloud-aarch64")
@@ -246,10 +242,6 @@ jobs:
           AWS_S3_BUCKET: ${{ vars.AWS_S3_BUCKET }}
           MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
           MATTERMOST_CHANNEL: ${{ vars.MATTERMOST_CHANNEL }}
-          HCP_CLIENT_ID: ${{ secrets.HCP_CLIENT_ID }}
-          HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
-          HCP_ORG: ${{ vars.HCP_ORG }}
-          vagrant_publish: ${{ inputs.vagrant_publish }}
           store_as_artifact: ${{ inputs.store_as_artifact }}
           upload_to_s3: ${{ inputs.upload_to_s3 }}
           notify_mattermost: ${{ inputs.notify_mattermost }}
@@ -300,13 +292,6 @@ jobs:
             variant: '10-kitten-64k'
           - matrix_sh: 'opennebula-aarch64'
             variant: '10-64k'
-          # Metal runners can't run in parallel, so we exclude 64k images
-          # - matrix_sh: 'azure-aarch64'
-          #   variant: '9-64k'
-          # - matrix_sh: 'azure-aarch64'
-          #   variant: '10-kitten-64k'
-          # - matrix_sh: 'azure-aarch64'
-          #   variant: '10-64k'
 
     steps:
     - name: Setup and start runner
@@ -367,13 +352,6 @@ jobs:
             variant: '10-kitten-64k'
           - matrix_sh: 'opennebula-aarch64'
             variant: '10-64k'
-          # Metal runners can't run in parallel, so we exclude 64k images
-          # - matrix_sh: 'azure-aarch64'
-          #   variant: '9-64k'
-          # - matrix_sh: 'azure-aarch64'
-          #   variant: '10-kitten-64k'
-          # - matrix_sh: 'azure-aarch64'
-          #   variant: '10-64k'
 
     env:
       TIME_STAMP: ${{ needs.init-data.outputs.time_stamp }}
@@ -406,14 +384,10 @@ jobs:
           AWS_S3_BUCKET: ${{ vars.AWS_S3_BUCKET }}
           MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
           MATTERMOST_CHANNEL: ${{ vars.MATTERMOST_CHANNEL }}
-          HCP_CLIENT_ID: ${{ secrets.HCP_CLIENT_ID }}
-          HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
-          HCP_ORG: ${{ vars.HCP_ORG }}
-          vagrant_publish: ${{ inputs.vagrant_publish }}
           store_as_artifact: ${{ inputs.store_as_artifact }}
           upload_to_s3: ${{ inputs.upload_to_s3 }}
           notify_mattermost: ${{ inputs.notify_mattermost }}
-          run_test: true # Do image simple testing and generate installed packages list (vagrant_* only)
+          run_test: ${{ contains(env.type, 'vagrant') && inputs.run_test && 'true' || 'false' }} # Do image simple testing and generate installed packages list (vagrant_* only)
           runner: ${{ github.repository_owner == 'AlmaLinux' && 'aws-ec2' || 'self_hosted' }}
         env:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GIT_HUB_TOKEN }}

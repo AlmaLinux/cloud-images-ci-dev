@@ -14,7 +14,7 @@ variable "os_ver_9" {
   description = "AlmaLinux OS 9 version"
 
   type    = string
-  default = "9.6"
+  default = "9.7"
 
   validation {
     condition     = can(regex("9.[0-9]$|9.[1-9][0-9]$", var.os_ver_9))
@@ -26,7 +26,7 @@ variable "os_ver_10" {
   description = "AlmaLinux OS 10 version"
 
   type    = string
-  default = "10.0"
+  default = "10.1"
 
   validation {
     condition     = can(regex("10.[0-9]$|10.[1-9][0-9]$", var.os_ver_10))
@@ -542,7 +542,7 @@ variable "gcp_disk_size" {
   description = "The size in GB of hard disk of VM"
 
   type    = string
-  default = "20G"
+  default = "10G"
 }
 
 local "gcp_boot_command_8_x86_64" {
@@ -908,7 +908,7 @@ variable "aws_volume_size" {
   description = "Volume size for AMI in GiB"
 
   type    = number
-  default = 4
+  default = 5
 }
 
 variable "aws_instance_type_x86_64" {
