@@ -1,0 +1,20 @@
+name: GCP Image Publish
+
+on:
+  workflow_dispatch:
+      inputs:
+        image_name:
+          description: Comma-separated list of image names to publish to GCP.  The images must already exist in GCP under the almalinux-dev-images-469421 project.
+          required: true
+          default: ''
+
+jobs:
+  publish-image:
+    name: Publish Images to almalinux-cloud GCP Project (prod)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: test
+        run: echo "Publishing image ${{ inputs.image_name }}"
+        shell: bash
