@@ -791,9 +791,13 @@ runs:
             summary
               .addLink('${{ env.IMAGE_NAME }}.txt', 'https://${{ inputs.AWS_S3_BUCKET }}.s3-accelerate.dualstack.amazonaws.com/${{ env.AWS_S3_PATH }}/${{ env.IMAGE_NAME }}.txt');
           }
-          {
+          if (process.env.got_pkgs_list === 'true') {
             summary
               .addRaw('Tests ${{ inputs.run_test == 'true' && 'passed ✅' || 'N/A ⚠️' }}');
+          }
+          if (process.env.got_pkgs_list === 'false') {
+            summary
+              .addRaw('Tests ${{ inputs.run_test == 'true' && 'failed ❌' || 'N/A ⚠️' }}');
           }
           summary.write();
 
@@ -815,7 +819,7 @@ runs:
             echo "- Image: [${{ env.IMAGE_NAME }}](https://${{ inputs.AWS_S3_BUCKET }}.s3-accelerate.dualstack.amazonaws.com/${{ env.AWS_S3_PATH }}/${{ env.IMAGE_NAME }})"
             echo "${{ env.got_pkgs_list == 'true' && format('- Packages list: [{0}.txt](https://{1}.s3-accelerate.dualstack.amazonaws.com/{2}/{3}.txt)', env.IMAGE_NAME, inputs.AWS_S3_BUCKET, env.AWS_S3_PATH, env.IMAGE_NAME) || ''}}"
           fi
-          echo "- Tests ${{ inputs.run_test == 'true' && 'passed ✅' || 'N/A ⚠️' }}"
+          echo "- Tests ${{ inputs.run_test == 'true' && ( env.got_pkgs_list == 'true' && 'passed ✅' || 'failed ❌' ) || 'N/A ⚠️' }}"
 
           echo EOF
         } >> "$GITHUB_ENV"
