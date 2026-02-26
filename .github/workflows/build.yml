@@ -246,6 +246,7 @@ jobs:
           notify_mattermost: ${{ inputs.notify_mattermost }}
           run_test: ${{ contains(env.type, 'vagrant') && inputs.run_test && 'true' || 'false' }} # Do image simple testing and generate installed packages list (vagrant_* only)
           runner: ${{ github.repository_owner == 'AlmaLinux' && 'aws-ec2' || 'gh_hosted' }}
+          self-hosted: ${{ inputs.self-hosted }}
         env:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GIT_HUB_TOKEN }}
 
@@ -403,5 +404,6 @@ jobs:
           notify_mattermost: ${{ inputs.notify_mattermost }}
           run_test: ${{ contains(env.type, 'vagrant') && inputs.run_test && 'true' || 'false' }} # Do image simple testing and generate installed packages list (vagrant_* only)
           runner: ${{ github.repository_owner == 'AlmaLinux' && 'aws-ec2' || 'self_hosted' }}
+          self-hosted: ${{ inputs.self-hosted }}
         env:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GIT_HUB_TOKEN }}

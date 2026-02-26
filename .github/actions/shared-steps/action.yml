@@ -44,6 +44,9 @@ inputs:
   runner:
     description: 'Type of runner to use for the build process'
     required: true
+  self-hosted:
+    description: 'Whether to use self-hosted runner (true/false)'
+    required: true
 
 runs:
   using: "composite"
@@ -331,7 +334,7 @@ runs:
         sudo udevadm trigger --name-match=kvm
 
     - name: Unload KVM modules
-      if: inputs.type == 'vagrant_virtualbox' && inputs.runner == 'aws-ec2'
+      if: inputs.type == 'vagrant_virtualbox' && ( inputs.runner == 'aws-ec2' || inputs.self-hosted == 'true' )
       shell: bash
       run: |
         # Unload KVM modules
