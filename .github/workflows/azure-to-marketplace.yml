@@ -1,0 +1,564 @@
+name: Azure image to Marketplace release
+
+on:
+  workflow_dispatch:
+      inputs:
+
+        image_blob_url:
+          description: "VHD blob URL in Azure Storage"
+          required: true
+          type: string
+          default: ''
+
+        release_to_marketplace:
+          description: "Release to Azure Marketplace"
+          required: true
+          type: boolean
+          default: false
+
+        notify_mattermost:
+          description: "Send notification to Mattermost"
+          required: true
+          type: boolean
+          default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  # Partner Center Product Ingestion API
+  PC_API_BASE: https://graph.microsoft.com/rp/product-ingestion
+  PC_API_VERSION: "2022-07-01"
+  # Azure storage account (same as azure-to-gallery.yml)
+  STORAGE_ACCOUNT: almalinux
+
+jobs:
+  release-image-to-marketplace:
+    name: "Release image to Azure Marketplace"
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Validate inputs
+      run: |
+        BLOB_URL="${{ inputs.image_blob_url }}"
+
+        if [ -z "${BLOB_URL}" ]; then
+          echo "[Error] image_blob_url is empty"
+          exit 1
+        fi
+
+        if [[ ! "${BLOB_URL}" =~ ^https://[a-z0-9]+\.blob\.core\.windows\.net/.+\.vhd$ ]]; then
+          echo "[Error] Invalid Azure blob URL: '${BLOB_URL}'"
+          echo "Expected: https://<account>.blob.core.windows.net/<container>/<blob>.vhd"
+          exit 1
+        fi
+
+        echo "✅ Input validation passed: ${BLOB_URL}"
+
+    - name: Parse image URL and filename
+      run: |
+        IMAGE_URL="${{ inputs.image_blob_url }}"
+        IMAGE_FILE=$(basename "${IMAGE_URL}")
+        echo "IMAGE_FILE=${IMAGE_FILE}" >> $GITHUB_ENV
+
+        # Reuse the same parsing logic as azure-to-gallery.yml
+        # Modern: AlmaLinux-10-Azure-10.1-20260216.0.x86_64.vhd
+        # Legacy: almalinux-9.6-x86_64.20250522-01.vhd
+        regex_modern='-([0-9]+\.?[0-9]*)-([0-9]{8,9}(\.[0-9])?).*\.(x86_64|aarch64|arm64)'
+        regex_legacy='almalinux-([0-9]+\.[0-9]+)-(x86_64|aarch64|arm64)\.([0-9]{8})'
+
+        if [[ "${IMAGE_FILE}" =~ $regex_modern ]]; then
+          release_version="${BASH_REMATCH[1]}"
+          timestamp="${BASH_REMATCH[2]}"
+          arch="${BASH_REMATCH[4]}"
+        elif [[ "${IMAGE_FILE}" =~ $regex_legacy ]]; then
+          release_version="${BASH_REMATCH[1]}"
+          arch="${BASH_REMATCH[2]}"
+          timestamp="${BASH_REMATCH[3]}"
+        else
+          echo "[Error] Could not parse '${IMAGE_FILE}' file name!"
+          exit 1
+        fi
+
+        # Determine image type (same as azure-to-gallery.yml)
+        case $arch in
+          x86_64) image_type="default" ;;
+          aarch64|arm64)
+            image_type="arm64"
+            [[ "${IMAGE_FILE}" == *-64k* ]] && image_type="arm64-64k"
+          ;;
+          *) echo "[Error] Unknown architecture: $arch" ; exit 1 ;;
+        esac
+
+        # Major version
+        major_version="${release_version%%.*}"
+
+        # AlmaLinux release string
+        case $release_version in
+          10) release_string="AlmaLinux Kitten OS $release_version $arch" ;;
+          *) release_string="AlmaLinux OS $release_version $arch" ;;
+        esac
+
+        echo "[Debug] Parsed metadata:"
+        echo "  Image file: ${IMAGE_FILE}"
+        echo "  Release version: ${release_version}"
+        echo "  Major version: ${major_version}"
+        echo "  Timestamp: ${timestamp}"
+        echo "  Architecture: ${arch}"
+        echo "  Image type: ${image_type}"
+        echo "  Release string: ${release_string}"
+
+        echo "RELEASE_VERSION=${release_version}" >> $GITHUB_ENV
+        echo "MAJOR_VERSION=${major_version}" >> $GITHUB_ENV
+        echo "TIMESTAMP=${timestamp}" >> $GITHUB_ENV
+        echo "ARCH=${arch}" >> $GITHUB_ENV
+        echo "IMAGE_TYPE=${image_type}" >> $GITHUB_ENV
+        echo "RELEASE_STRING=${release_string}" >> $GITHUB_ENV
+
+    - name: Get corresponded Offer and Plan IDs
+      run: |
+        # Map version + image type to Azure Marketplace offer and plan IDs.
+        # These correspond to "Core virtual machine" offers in Partner Center.
+        MAJOR="${{ env.MAJOR_VERSION }}"
+        IMAGE_TYPE="${{ env.IMAGE_TYPE }}"
+        VERSION="${{ env.RELEASE_VERSION }}"
+
+        # Detect Kitten (version "10" without minor, e.g. "10" vs "10.1")
+        IS_KITTEN="false"
+        [[ "${VERSION}" == "10" ]] && IS_KITTEN="true"
+
+        if [[ "${IS_KITTEN}" == "true" ]]; then
+          KEY="kitten-${MAJOR} ${IMAGE_TYPE}"
+        else
+          KEY="${MAJOR} ${IMAGE_TYPE}"
+        fi
+
+        case "${KEY}" in
+          # AlmaLinux OS 8
+          "8 default")          OFFER_ID="almalinux-x86_64"; PLAN_ID="8-gen2" ;;
+          "8 arm64")            OFFER_ID="almalinux-arm"; PLAN_ID="8-arm-gen2" ;;
+          # AlmaLinux OS 9
+          "9 default")          OFFER_ID="almalinux-x86_64"; PLAN_ID="9-gen2" ;;
+          "9 arm64")            OFFER_ID="almalinux-arm"; PLAN_ID="9-arm-gen2" ;;
+          "9 arm64-64k")        OFFER_ID="almalinux-arm"; PLAN_ID="9-arm-64k-gen2" ;;
+          # AlmaLinux OS 10
+          "10 default")         OFFER_ID="almalinux-x86_64"; PLAN_ID="10-gen2" ;;
+          "10 arm64")           OFFER_ID="almalinux-arm"; PLAN_ID="10-arm64-gen2" ;;
+          "10 arm64-64k")       OFFER_ID="almalinux-arm"; PLAN_ID="10-arm64-64k-gen2" ;;
+          # AlmaLinux Kitten OS 10
+          "kitten-10 default")  OFFER_ID="kitten"; PLAN_ID="10-x64-gen2" ;;
+          "kitten-10 arm64")    OFFER_ID="kitten"; PLAN_ID="10-arm64-gen2" ;;
+          *)
+            echo "[Error] Unsupported: version=${VERSION}, image_type=${IMAGE_TYPE}"
+            exit 1
+            ;;
+        esac
+
+        echo "[Debug] Offer ID: ${OFFER_ID}"
+        echo "[Debug] Plan ID: ${PLAN_ID}"
+        echo "OFFER_ID=${OFFER_ID}" >> $GITHUB_ENV
+        echo "PLAN_ID=${PLAN_ID}" >> $GITHUB_ENV
+
+    - name: Azure login
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Generate SAS URI for VHD blob
+      run: |
+        # The SAS token must be generated at the CONTAINER level (not
+        # blob level) with Read + List permissions.  The final VHD SAS
+        # URI is then constructed by inserting the blob name into the
+        # container SAS URL.
+        #
+        # Container SAS: https://<acct>.blob.core.windows.net/<container>?<sas>
+        # VHD SAS URI:   https://<acct>.blob.core.windows.net/<container>/<blob>.vhd?<sas>
+        BLOB_URL="${{ inputs.image_blob_url }}"
+
+        STORAGE_ACCOUNT=$(echo "${BLOB_URL}" | sed -n 's|https://\([^.]*\)\.blob\.core\.windows\.net/.*|\1|p')
+        CONTAINER_AND_BLOB=$(echo "${BLOB_URL}" | sed -n 's|https://[^/]*/\(.*\)|\1|p')
+        CONTAINER_NAME=$(echo "${CONTAINER_AND_BLOB}" | cut -d'/' -f1)
+        BLOB_NAME=$(echo "${CONTAINER_AND_BLOB}" | cut -d'/' -f2-)
+
+        echo "[Debug] Storage Account: ${STORAGE_ACCOUNT}"
+        echo "[Debug] Container: ${CONTAINER_NAME}"
+        echo "[Debug] Blob: ${BLOB_NAME}"
+
+        # SAS valid for 60 days (Microsoft recommends at least 3 weeks)
+        EXPIRY=$(date -u -d "+60 days" +%Y-%m-%dT%H:%MZ)
+
+        SAS_TOKEN=$(az storage container generate-sas \
+          --account-name "${STORAGE_ACCOUNT}" \
+          --name "${CONTAINER_NAME}" \
+          --permissions rl \
+          --expiry "${EXPIRY}" \
+          --auth-mode login \
+          --as-user \
+          --output tsv)
+
+        if [ -z "${SAS_TOKEN}" ]; then
+          echo "[Error] Failed to generate container SAS token"
+          exit 1
+        fi
+
+        # Build the VHD SAS URI by inserting blob name into container SAS URL
+        SAS_URI="https://${STORAGE_ACCOUNT}.blob.core.windows.net/${CONTAINER_NAME}/${BLOB_NAME}?${SAS_TOKEN}"
+        echo "[Debug] SAS URI generated (expires: ${EXPIRY})"
+        echo "[Debug] SAS URI: ${SAS_URI}"
+        echo "SAS_URI=${SAS_URI}" >> $GITHUB_ENV
+
+    - name: Get Partner Center access token
+      run: |
+        # Get an access token for the Product Ingestion API
+        ACCESS_TOKEN=$(az account get-access-token \
+          --resource https://graph.microsoft.com \
+          --query accessToken --output tsv)
+
+        if [ -z "${ACCESS_TOKEN}" ]; then
+          echo "[Error] Failed to get Partner Center access token"
+          echo "[Error] Ensure the app registration has Partner Center API permissions"
+          exit 1
+        fi
+
+        echo "::add-mask::${ACCESS_TOKEN}"
+        echo "PC_ACCESS_TOKEN=${ACCESS_TOKEN}" >> $GITHUB_ENV
+        echo "[Debug] ✅ Partner Center access token acquired"
+
+    - name: Get product resource tree
+      run: |
+        # Fetch the product and its resource tree from the Product Ingestion API.
+        # This discovers the offer structure (plans, technical configs, etc.)
+        # and is essential for building the correct configure payload.
+        API="${{ env.PC_API_BASE }}"
+        VER="${{ env.PC_API_VERSION }}"
+        TOKEN="${{ env.PC_ACCESS_TOKEN }}"
+
+        echo "[Debug] Looking up product: ${{ env.OFFER_ID }}"
+
+        # Get product by external ID
+        set +e
+        PRODUCT_DATA=$(curl -sf \
+          "${API}/product?externalId=${{ env.OFFER_ID }}&\$version=${VER}" \
+          -H "Authorization: Bearer ${TOKEN}" \
+          -H "Content-Type: application/json" \
+          2>&1)
+        CURL_EXIT=$?
+        set -e
+
+        if [ ${CURL_EXIT} -ne 0 ] || [ -z "${PRODUCT_DATA}" ]; then
+          echo "[Error] Failed to get product data"
+          echo "${PRODUCT_DATA}"
+          exit 1
+        fi
+
+        PRODUCT_DURABLE_ID=$(echo "${PRODUCT_DATA}" | jq -r '.value[0].id // empty')
+
+        if [ -z "${PRODUCT_DURABLE_ID}" ]; then
+          echo "[Error] Product not found: ${{ env.OFFER_ID }}"
+          echo "[Debug] API response:"
+          echo "${PRODUCT_DATA}" | jq '.'
+          exit 1
+        fi
+
+        echo "[Debug] Product durable ID: ${PRODUCT_DURABLE_ID}"
+        echo "PRODUCT_DURABLE_ID=${PRODUCT_DURABLE_ID}" >> $GITHUB_ENV
+
+        # Fetch the full resource tree
+        set +e
+        RESOURCE_TREE=$(curl -sf \
+          "${API}/resource-tree/${PRODUCT_DURABLE_ID}?\$version=${VER}" \
+          -H "Authorization: Bearer ${TOKEN}" \
+          -H "Content-Type: application/json" \
+          2>&1)
+        TREE_EXIT=$?
+        set -e
+
+        if [ ${TREE_EXIT} -ne 0 ] || [ -z "${RESOURCE_TREE}" ]; then
+          echo "[Warning] Failed to get resource tree (may need different API permissions)"
+          echo "${RESOURCE_TREE}"
+        else
+          echo "[Debug] Resource tree for ${{ env.OFFER_ID }}:"
+          echo "${RESOURCE_TREE}" | jq '.'
+
+          # Extract plan IDs for reference
+          echo ""
+          echo "[Debug] Available plans:"
+          echo "${RESOURCE_TREE}" | jq -r \
+            '.resources[]? | select(.["$schema"] | test("plan/")) | {id, externalId: .identity?.externalId, name: .azureName} | @json' \
+            2>/dev/null || echo "(Could not parse plans — check the resource tree output above)"
+        fi
+
+    - name: Get current plan technical configuration
+      run: |
+        # Fetch the current technical configuration for the target plan.
+        # This shows the existing VM image versions and their structure.
+        API="${{ env.PC_API_BASE }}"
+        VER="${{ env.PC_API_VERSION }}"
+        TOKEN="${{ env.PC_ACCESS_TOKEN }}"
+        OFFER="${{ env.OFFER_ID }}"
+        PLAN="${{ env.PLAN_ID }}"
+
+        echo "[Debug] Fetching technical configuration for plan: ${PLAN}"
+
+        # Query the plan's technical configuration
+        set +e
+        TECH_CONFIG=$(curl -sf \
+          "${API}/technical-configuration?product.externalId=${OFFER}&plan.externalId=${PLAN}&\$version=${VER}" \
+          -H "Authorization: Bearer ${TOKEN}" \
+          -H "Content-Type: application/json" \
+          2>&1)
+        TC_EXIT=$?
+        set -e
+
+        if [ ${TC_EXIT} -ne 0 ] || [ -z "${TECH_CONFIG}" ]; then
+          echo "[Warning] Failed to get technical configuration"
+          echo "[Warning] This may indicate the plan ID is incorrect or the API path differs"
+          echo "${TECH_CONFIG}"
+        else
+          echo "[Debug] Current technical configuration:"
+          echo "${TECH_CONFIG}" | jq '.'
+
+          # Save for use in the configure step
+          echo "${TECH_CONFIG}" > /tmp/current_tech_config.json
+        fi
+
+    - name: Configure new VM image version
+      if: inputs.release_to_marketplace
+      run: |
+        # Add a new VM image version to the plan's technical configuration
+        # via the Product Ingestion API.
+        #
+        # Reference: https://learn.microsoft.com/en-us/partner-center/marketplace-offers/product-ingestion-api
+        API="${{ env.PC_API_BASE }}"
+        VER="${{ env.PC_API_VERSION }}"
+        TOKEN="${{ env.PC_ACCESS_TOKEN }}"
+        OFFER="${{ env.OFFER_ID }}"
+        PLAN="${{ env.PLAN_ID }}"
+        SAS_URI="${{ env.SAS_URI }}"
+
+        # Version number for the new image
+        PACKAGE_VERSION="${{ env.RELEASE_VERSION }}.${{ env.TIMESTAMP }}"
+        echo "[Debug] Package version: ${PACKAGE_VERSION}"
+
+        # Determine the VM generation / image type for the payload
+        case "${{ env.IMAGE_TYPE }}" in
+          default)   VM_IMAGE_TYPE="x64Gen2" ;;
+          arm64*)    VM_IMAGE_TYPE="armGen2" ;;
+        esac
+        echo "[Debug] VM image type: ${VM_IMAGE_TYPE}"
+
+        # Build the configuration payload.
+        # NOTE: The exact schema may need adjustment based on the resource tree
+        # output from the previous step. The schema below follows the Product
+        # Ingestion API documentation for "Core virtual machine" offers.
+        cat > /tmp/configure_payload.json << PAYLOAD
+        {
+          "\$schema": "https://product-ingestion.azureedge.net/schema/configure",
+          "resources": [
+            {
+              "\$schema": "https://product-ingestion.azureedge.net/schema/virtual-machine-plan-technical-configuration/2022-03-01-preview5",
+              "product": {
+                "externalId": "${OFFER}"
+              },
+              "plan": {
+                "externalId": "${PLAN}"
+              },
+              "vmImageVersions": [
+                {
+                  "versionNumber": "${PACKAGE_VERSION}",
+                  "vmImages": [
+                    {
+                      "imageType": "${VM_IMAGE_TYPE}",
+                      "source": {
+                        "sourceType": "sasUri",
+                        "osDisk": {
+                          "uri": "${SAS_URI}"
+                        },
+                        "dataDisks": []
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        PAYLOAD
+
+        echo "[Debug] Configure payload:"
+        jq '.' /tmp/configure_payload.json
+
+        # Submit the configuration
+        set +e
+        CONFIGURE_RESPONSE=$(curl -sf -X POST \
+          "${API}/configure?\$version=${VER}" \
+          -H "Authorization: Bearer ${TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d @/tmp/configure_payload.json \
+          2>&1)
+        CONFIGURE_EXIT=$?
+        set -e
+
+        echo "[Debug] Configure response (exit: ${CONFIGURE_EXIT}):"
+        echo "${CONFIGURE_RESPONSE}" | jq '.' 2>/dev/null || echo "${CONFIGURE_RESPONSE}"
+
+        if [ ${CONFIGURE_EXIT} -ne 0 ]; then
+          echo "[Error] Failed to configure new VM image version"
+          exit 1
+        fi
+
+        # Check for errors in the response
+        ERROR_CODE=$(echo "${CONFIGURE_RESPONSE}" | jq -r '.error.code // empty' 2>/dev/null)
+        if [ -n "${ERROR_CODE}" ]; then
+          echo "[Error] API returned error: ${ERROR_CODE}"
+          echo "${CONFIGURE_RESPONSE}" | jq '.error' 2>/dev/null
+          exit 1
+        fi
+
+        # Extract job ID for tracking
+        JOB_ID=$(echo "${CONFIGURE_RESPONSE}" | jq -r '.jobId // empty' 2>/dev/null)
+        if [ -n "${JOB_ID}" ]; then
+          echo "JOB_ID=${JOB_ID}" >> $GITHUB_ENV
+          echo "[Debug] Configuration job ID: ${JOB_ID}"
+
+          # Poll for job completion
+          echo "[Debug] Waiting for configuration to complete..."
+          MAX_WAIT=600  # 10 minutes
+          POLL_INTERVAL=15
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            set +e
+            JOB_STATUS=$(curl -sf \
+              "${API}/configure/${JOB_ID}/status?\$version=${VER}" \
+              -H "Authorization: Bearer ${TOKEN}" \
+              2>&1)
+            set -e
+
+            STATUS=$(echo "${JOB_STATUS}" | jq -r '.jobStatus // empty' 2>/dev/null)
+            echo "[Debug] Job status: ${STATUS} (elapsed: ${ELAPSED}s)"
+
+            if [ "${STATUS}" = "completed" ]; then
+              echo "[Debug] ✅ Configuration completed"
+              break
+            elif [ "${STATUS}" = "failed" ]; then
+              echo "[Error] ❌ Configuration failed"
+              echo "${JOB_STATUS}" | jq '.' 2>/dev/null || echo "${JOB_STATUS}"
+              exit 1
+            fi
+
+            sleep $POLL_INTERVAL
+            ELAPSED=$((ELAPSED + POLL_INTERVAL))
+          done
+
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "[Error] ⏱️ Timeout waiting for configuration after ${MAX_WAIT}s"
+            exit 1
+          fi
+        fi
+
+        echo "PACKAGE_VERSION=${PACKAGE_VERSION}" >> $GITHUB_ENV
+
+    - name: Submit for review
+      if: inputs.release_to_marketplace
+      run: |
+        # Submit the offer for review and publishing
+        API="${{ env.PC_API_BASE }}"
+        VER="${{ env.PC_API_VERSION }}"
+        TOKEN="${{ env.PC_ACCESS_TOKEN }}"
+        OFFER="${{ env.OFFER_ID }}"
+
+        echo "[Debug] Submitting offer '${OFFER}' for review..."
+
+        cat > /tmp/submission_payload.json << PAYLOAD
+        {
+          "\$schema": "https://product-ingestion.azureedge.net/schema/submission/2022-07-01",
+          "product": {
+            "externalId": "${OFFER}"
+          },
+          "target": {
+            "targetType": "live"
+          }
+        }
+        PAYLOAD
+
+        echo "[Debug] Submission payload:"
+        jq '.' /tmp/submission_payload.json
+
+        set +e
+        SUBMIT_RESPONSE=$(curl -sf -X POST \
+          "${API}/submission?\$version=${VER}" \
+          -H "Authorization: Bearer ${TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d @/tmp/submission_payload.json \
+          2>&1)
+        SUBMIT_EXIT=$?
+        set -e
+
+        echo "[Debug] Submission response (exit: ${SUBMIT_EXIT}):"
+        echo "${SUBMIT_RESPONSE}" | jq '.' 2>/dev/null || echo "${SUBMIT_RESPONSE}"
+
+        if [ ${SUBMIT_EXIT} -ne 0 ]; then
+          echo "[Warning] Failed to submit for review (exit code: ${SUBMIT_EXIT})"
+          echo "[Warning] You may need to submit manually from Partner Center"
+        else
+          ERROR_CODE=$(echo "${SUBMIT_RESPONSE}" | jq -r '.error.code // empty' 2>/dev/null)
+          if [ -n "${ERROR_CODE}" ]; then
+            echo "[Warning] API returned error: ${ERROR_CODE}"
+            echo "${SUBMIT_RESPONSE}" | jq '.error' 2>/dev/null
+            echo "[Warning] You may need to submit manually from Partner Center"
+          else
+            SUBMISSION_ID=$(echo "${SUBMIT_RESPONSE}" | jq -r '.jobId // empty' 2>/dev/null)
+            echo "SUBMISSION_ID=${SUBMISSION_ID}" >> $GITHUB_ENV
+            echo "[Debug] ✅ Submitted for review (job ID: ${SUBMISSION_ID})"
+          fi
+        fi
+
+    - name: Print job summary
+      run: |
+        {
+          echo "## Azure Marketplace Image Publish"
+          echo ""
+          echo "### Image Details"
+          echo "- **Image**: ${{ env.RELEASE_STRING }} \`${{ env.TIMESTAMP }}\`"
+          echo "- **Image file**: \`${{ env.IMAGE_FILE }}\`"
+          echo "- **Blob URL**: \`${{ inputs.image_blob_url }}\`"
+          echo ""
+          echo "### Marketplace"
+          echo "- **Offer ID**: \`${{ env.OFFER_ID }}\`"
+          echo "- **Plan ID**: \`${{ env.PLAN_ID }}\`"
+          echo "- **Product durable ID**: \`${{ env.PRODUCT_DURABLE_ID }}\`"
+          if [[ "${{ inputs.release_to_marketplace }}" == "true" ]]; then
+            echo "- **Package version**: \`${{ env.PACKAGE_VERSION }}\`"
+            [[ -n "${{ env.JOB_ID }}" ]] && echo "- **Configuration job**: \`${{ env.JOB_ID }}\`"
+            [[ -n "${{ env.SUBMISSION_ID }}" ]] && echo "- **Submission job**: \`${{ env.SUBMISSION_ID }}\`"
+          fi
+          echo ""
+          echo "### Status"
+          if [[ "${{ inputs.release_to_marketplace }}" == "true" ]]; then
+            echo "✅ New VM image version configured and submitted for review."
+            echo ""
+            echo "Check the status in [Partner Center](https://partner.microsoft.com/dashboard/marketplace-offers/overview)"
+          else
+            echo "❌ **Marketplace release was not requested** (dry run — metadata parsed and SAS URI generated only)"
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Send notification to Mattermost
+      uses: mattermost/action-mattermost-notify@master
+      if: inputs.notify_mattermost
+      with:
+        MATTERMOST_WEBHOOK_URL: ${{ secrets.MATTERMOST_WEBHOOK_URL }}
+        MATTERMOST_CHANNEL: ${{ vars.MATTERMOST_CHANNEL }}
+        MATTERMOST_USERNAME: ${{ github.triggering_actor }}
+        TEXT: |
+          :almalinux: **${{ env.RELEASE_STRING }}** `${{ env.TIMESTAMP }}` Azure Marketplace, by the GitHub [Action](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          - Image file: `${{ env.IMAGE_FILE }}`
+          - Offer: `${{ env.OFFER_ID }}` / Plan: `${{ env.PLAN_ID }}`
+          ${{ inputs.release_to_marketplace && format('- Package version: `{0}`', env.PACKAGE_VERSION) || '' }}
+          - Released to Marketplace: ${{ inputs.release_to_marketplace && '✅' || '❌' }}
