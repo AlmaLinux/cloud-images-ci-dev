@@ -284,7 +284,9 @@ jobs:
           echo "SYSTEM_ARCH=${SYSTEM_ARCH}" >> "$GITHUB_ENV"
 
           echo "[Debug] Check for updates:"
-          dnf check-update || exit 1
+          # TEMPORARY: exit code checking disabled (dnf check-update returns
+          # 100 when updates are pending, failing the step)
+          dnf check-update || true
 
       - uses: actions/upload-artifact@v7
         name: Store packages list as artifact

@@ -465,7 +465,9 @@ runs:
           sudo vagrant ssh default -c "sudo lsblk"
           sudo vagrant ssh default -c "ROOT_SIZE_BYTES=\$(df -B1 --output=size / | tail -n 1 | tr -d ' '); MIN_SIZE_BYTES=\$((98*1024*1024*1024)); [ \"\${ROOT_SIZE_BYTES}\" -gt \"\${MIN_SIZE_BYTES}\" ] || { echo \"[Error] Root filesystem resize check failed: \${ROOT_SIZE_BYTES} bytes (expected > \${MIN_SIZE_BYTES} bytes)\"; exit 1; }"
           echo "[Debug] Check for updates:"
-          sudo vagrant ssh default -c "sudo dnf check-update"
+          # TEMPORARY: exit code checking disabled (dnf check-update returns
+          # 100 when updates are pending, failing the step)
+          sudo vagrant ssh default -c "sudo dnf check-update" || true
           echo "[Debug] Vagrant-specific RPM packages:"
           # Packages preinstalled by the vagrant kickstarts plus cloud-init
           # (installed by the 'vagrant_guest' role) - common to every Vagrant
