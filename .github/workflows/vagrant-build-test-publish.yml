@@ -177,17 +177,10 @@ jobs:
     needs: [init-data]
     if: ${{ needs.init-data.outputs.matrix_gh != '[]' }}
     # use runs-on runners if within the almalinux org, otherwise GH runners"
-    # TEMPORARY: pinned to the last known-good ubuntu24-full-x64 AMI. The
-    # refreshed image (kernel 6.17.0-1019-aws) breaks VirtualBox's hardened
-    # loader: every VM terminates instantly on startup with
-    # "Error -610 in supR3HardenedMainInitRuntime!
-    #  dlopen(/usr/lib/virtualbox/VBoxRT.so) failed" (7.1 and 7.2 alike).
-    # Drop the ami= pin (restore image=ubuntu24-full-x64) once the runs-on
-    # image or VirtualBox is fixed.
     runs-on: >-
       ${{
         github.repository_owner == 'AlmaLinux' &&
-          format('runs-on={0}/family=r8i.2xlarge/ami=ami-002d02e5efde1185d/volume=60g/spot=false/nested-virt', github.run_id)
+          format('runs-on={0}/family=r8i.2xlarge/image=ubuntu24-full-x64/volume=60g/spot=false/nested-virt', github.run_id)
         ||
         'ubuntu-24.04'
       }}
