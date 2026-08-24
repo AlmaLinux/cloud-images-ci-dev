@@ -1,7 +1,37 @@
 ---
+# The surrogate EBS volume is attached as /dev/sdb, but on Nitro instances
+# the NVMe enumeration order is not stable: the surrogate is usually
+# /dev/nvme1n1 with the root disk on /dev/nvme0n1, but the two can swap.
+# Resolve the surrogate as the EBS disk that is NOT the root disk instead
+# of hardcoding a device name - with the hardcode, a swapped enumeration
+# pointed parted at the live root disk and the build failed intermittently
+# with "Error: Partition(s) on /dev/nvme1n1 are being used".
+- name: Resolve the surrogate EBS device
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      root_disk="$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" | head -n 1)"
+      lsblk -dno NAME,MODEL \
+        | awk -v root="${root_disk}" '$1 != root && /Elastic Block Store/ {print "/dev/" $1; exit}'
+  args:
+    executable: /bin/bash
+  register: surrogate_device_cmd
+  changed_when: false
+
+- name: Set the surrogate device fact
+  ansible.builtin.set_fact:
+    surrogate_device: "{{ surrogate_device_cmd.stdout | trim }}"
+
+- name: Verify the surrogate device was found
+  ansible.builtin.assert:
+    that:
+      - surrogate_device | length > 0
+    fail_msg: No non-root EBS disk found for the surrogate volume
+    success_msg: "Surrogate EBS device: {{ surrogate_device }}"
+
 - name: Gather disk information
   ansible.builtin.command:
-    cmd: parted -s -a optimal /dev/nvme1n1 -- unit MiB print
+    cmd: parted -s -a optimal {{ surrogate_device }} -- unit MiB print
   register: parted_output
   failed_when: '"Error: Could not stat device" in parted_output.stderr'
   changed_when: false
@@ -12,50 +42,50 @@
 
 - name: Create GPT Partition Table
   ansible.builtin.command:
-    cmd: parted -s -a optimal /dev/nvme1n1 -- mklabel gpt
+    cmd: parted -s -a optimal {{ surrogate_device }} -- mklabel gpt
   changed_when: true
 
 - name: Create BIOS boot partition
   ansible.builtin.command:
-    cmd: parted -s -a optimal /dev/nvme1n1 -- mkpart biosboot 0% 2MiB set 1 bios_grub on
+    cmd: parted -s -a optimal {{ surrogate_device }} -- mkpart biosboot 0% 2MiB set 1 bios_grub on
   changed_when: true
 
 - name: Create ESP partition
   ansible.builtin.command:
-    cmd: parted -s -a optimal /dev/nvme1n1 -- mkpart '"EFI System Partition"' fat32 2MiB 202MiB set 2 esp on
+    cmd: parted -s -a optimal {{ surrogate_device }} -- mkpart '"EFI System Partition"' fat32 2MiB 202MiB set 2 esp on
   changed_when: true
 
 - name: Create Boot Partition
   ansible.builtin.command:
-    cmd: parted -s -a optimal /dev/nvme1n1 -- mkpart boot xfs 202MiB 1226MiB
+    cmd: parted -s -a optimal {{ surrogate_device }} -- mkpart boot xfs 202MiB 1226MiB
   changed_when: true
 
 - name: Create Root Partition
   ansible.builtin.command:
-    cmd: parted -s -a optimal /dev/nvme1n1 -- mkpart root xfs 1226MiB 100%
+    cmd: parted -s -a optimal {{ surrogate_device }} -- mkpart root xfs 1226MiB 100%
   changed_when: true
 
 - name: Format ESP partition as FAT32
   community.general.filesystem:
-    dev: /dev/nvme1n1p2
+    dev: "{{ surrogate_device }}p2"
     fstype: vfat
     state: present
 
 - name: Format Boot partition as XFS
   community.general.filesystem:
-    dev: /dev/nvme1n1p3
+    dev: "{{ surrogate_device }}p3"
     fstype: xfs
     state: present
 
 - name: Format Root partition as XFS
   community.general.filesystem:
-    dev: /dev/nvme1n1p4
+    dev: "{{ surrogate_device }}p4"
     fstype: xfs
     state: present
 
 - name: Gather disk information
   ansible.builtin.command:
-    cmd: parted -s -a optimal /dev/nvme1n1 -- unit MiB print
+    cmd: parted -s -a optimal {{ surrogate_device }} -- unit MiB print
   register: parted_output
   changed_when: false
 
@@ -65,18 +95,18 @@
 
 - name: Get UUID of ESP
   ansible.builtin.command:
-    cmd: blkid /dev/nvme1n1p2 -s UUID -o value
+    cmd: blkid {{ surrogate_device }}p2 -s UUID -o value
   register: esp_uuid
   changed_when: false
 
 - name: Get UUID of Boot
   ansible.builtin.command:
-    cmd: blkid /dev/nvme1n1p3 -s UUID -o value
+    cmd: blkid {{ surrogate_device }}p3 -s UUID -o value
   register: boot_uuid
   changed_when: false
 
 - name: Get UUID of Root
   ansible.builtin.command:
-    cmd: blkid /dev/nvme1n1p4 -s UUID -o value
+    cmd: blkid {{ surrogate_device }}p4 -s UUID -o value
   register: root_uuid
   changed_when: false

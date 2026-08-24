@@ -7,7 +7,7 @@
 
 - name: Mount chroot root partition
   ansible.posix.mount:
-    src: /dev/nvme1n1p4
+    src: "{{ surrogate_device }}p4"
     path: /rootfs
     fstype: xfs
     state: ephemeral
@@ -20,7 +20,7 @@
 
 - name: Mount chroot boot partition
   ansible.posix.mount:
-    src: /dev/nvme1n1p3
+    src: "{{ surrogate_device }}p3"
     path: /rootfs/boot
     fstype: xfs
     state: ephemeral
@@ -33,7 +33,7 @@
 
 - name: Mount chroot esp partition
   ansible.posix.mount:
-    src: /dev/nvme1n1p2
+    src: "{{ surrogate_device }}p2"
     path: /rootfs/boot/efi
     fstype: vfat
     state: ephemeral

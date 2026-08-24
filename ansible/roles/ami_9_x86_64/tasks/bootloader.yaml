@@ -18,7 +18,7 @@
 
 - name: Install GRUB for BIOS
   ansible.builtin.command:
-    cmd: chroot /rootfs grub2-install --target=i386-pc /dev/nvme1n1
+    cmd: chroot /rootfs grub2-install --target=i386-pc {{ surrogate_device }}
     creates: /rootfs/boot/grub2/i386-pc
 
 - name: Generate GRUB configuration
