@@ -93,6 +93,7 @@ If `custom_plan_id` is provided, it overrides the auto-detected Plan ID while ke
 | AlmaLinux 10 | x86_64 | `almalinux-x86_64` | `10-gen2` |
 | AlmaLinux 10 | arm64 | `almalinux-arm` | `10-arm64-gen2` |
 | AlmaLinux 10 | arm64-64k | `almalinux-arm` | `10-arm64-64k-gen2` |
+| AlmaLinux 10 | hpc | `almalinux-hpc` | `10-hpc-gen1` (default) |
 | Kitten 10 | x86_64 | `kitten` | `10-x64-gen2` |
 | Kitten 10 | arm64 | `kitten` | `10-arm64-gen2` |
 
@@ -109,6 +110,7 @@ default **Plan ID** in these cases:
 | AlmaLinux OS 8.10 HPC for NVIDIA V100 GPU | `8_10-hpc-v100-gen1` | `8_10-hpc-v100-gen2`, `8_10-hpc-v100-gen1` |
 | AlmaLinux OS 9 HPC | `9-hpc-gen2` | `9-hpc-gen2`, `9-hpc-gen1` |
 | AlmaLinux OS 9 HPC for NVIDIA V100 GPU | `9-hpc-v100-gen1` | `9-hpc-v100-gen2`, `9-hpc-v100-gen1` |
+| AlmaLinux OS 10 HPC | `10-hpc-gen1` | `10-hpc-gen2`, `10-hpc-gen1` |
 
 ## VHD Filename Patterns
 
@@ -131,6 +133,7 @@ AlmaLinux-{major}-HPC-{version}-{date}.{index}.{arch}.vhd
 Examples:
 - `AlmaLinux-8-HPC-8.10-20260330.0.x86_64.vhd`
 - `AlmaLinux-9-HPC-9.7-20260330.0.x86_64.vhd`
+- `AlmaLinux-10-HPC-10.2-20260826.0.x86_64.vhd`
 
 ### Legacy Format
 ```

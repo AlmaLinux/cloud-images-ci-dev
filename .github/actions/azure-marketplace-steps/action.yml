@@ -206,6 +206,7 @@ runs:
           "10 default")         OFFER_ID="almalinux-x86_64"; PLAN_ID="10-gen2" ;;
           "10 arm64")           OFFER_ID="almalinux-arm"; PLAN_ID="10-arm64-gen2" ;;
           "10 arm64-64k")       OFFER_ID="almalinux-arm"; PLAN_ID="10-arm64-64k-gen2" ;;
+          "10 hpc")             OFFER_ID="almalinux-hpc"; PLAN_ID="10-hpc-gen1" ;;
           # AlmaLinux Kitten OS 10
           "kitten-10 default")  OFFER_ID="kitten"; PLAN_ID="10-x64-gen2" ;;
           "kitten-10 arm64")    OFFER_ID="kitten"; PLAN_ID="10-arm64-gen2" ;;
