@@ -28,7 +28,7 @@ Workflow for uploading AlmaLinux OS High-Performance Computing (HPC) images to A
 - Accepts a base64-encoded Blob SAS Token URL (provided by the HPC image vendor) and an image version string
 - Downloads the HPC VHD blob via `azcopy`
 - Computes its MD5 checksum
-- Uploads the blob to the `almalinux` storage account in a `{major}-hpc` container with content MD5 validation
+- Uploads the blob to the `almalinux` storage account in a `{major}-hpc` container (`8-hpc`, `9-hpc`, `10-hpc`) with content MD5 validation
 - Sends Mattermost notifications and generates job summaries
 
 **Usage:**
@@ -203,7 +203,8 @@ Blob containers are named per major version and image type:
 | 9.x | arm64 | `9-arm64` |
 | 9.x | arm64-64k | `9-arm64-64k` |
 | 9.x | hpc | `9-hpc` |
-| 10.x | any | `almalinux-10` |
+| 10.x | default, arm64, arm64-64k | `almalinux-10` |
+| 10.x | hpc | `10-hpc` |
 | Kitten 10 | any | `kitten-10` |
 
 ## Workflow Process
