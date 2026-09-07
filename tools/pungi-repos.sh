@@ -88,6 +88,14 @@ for major in "${MAJORS[@]}"; do
         # Stable, os_ver interpolation (variables.pkr.hcl locals):
         #   .../almalinux/${var.os_ver_<major>}/isos/<arch>/...
         SED_PROG+=(-e "s#https://repo\.almalinux\.org/almalinux/\\\$\{var\.os_ver_${major}\}/([A-Za-z]+)/${arch}/#${pungi}/latest_result_almalinux/compose/\1/${arch}/#g")
+
+        # ISO file names inside the compose: the 9 and 10 composes are in
+        # the beta phase and name their ISOs
+        # AlmaLinux-<major>-latest-beta-<arch>-*.iso, so the
+        # AlmaLinux-${var.os_ver_<major>}-<arch>-*.iso names from the
+        # public repo do not exist there. Rename them on the
+        # already-rewritten (PUNGI) URLs only.
+        SED_PROG+=(-e "s#(latest_result_almalinux/compose/isos/${arch}/)AlmaLinux-\\\$\{var\.os_ver_${major}\}-#\1AlmaLinux-${major}-latest-beta-#g")
     done
 done
 
