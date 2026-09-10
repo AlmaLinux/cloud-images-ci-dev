@@ -276,7 +276,10 @@ runs:
 
     - name: Initialize packer
       shell: bash
-      run: sudo /usr/bin/packer init -upgrade .
+      # sudo would strip PACKER_GITHUB_API_TOKEN from the environment,
+      # leaving packer init unauthenticated against api.github.com and
+      # subject to the shared-IP anonymous rate limit - preserve it.
+      run: sudo --preserve-env=PACKER_GITHUB_API_TOKEN /usr/bin/packer init -upgrade .
 
     - name: Build ${{ inputs.type }} image
       shell: bash
